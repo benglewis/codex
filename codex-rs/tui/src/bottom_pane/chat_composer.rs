@@ -726,6 +726,14 @@ impl ChatComposer {
             }
             KeyEvent {
                 code: KeyCode::Enter,
+                modifiers,
+                ..
+            } if modifiers.contains(KeyModifiers::SHIFT) => {
+                self.textarea.insert_str("\n");
+                (InputResult::None, true)
+            }
+            KeyEvent {
+                code: KeyCode::Enter,
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
@@ -1523,6 +1531,40 @@ mod tests {
             _ => panic!("expected Submitted"),
         }
         assert!(composer.pending_pastes.is_empty());
+    }
+
+    #[test]
+    fn shift_enter_inserts_newline_without_submitting() {
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEvent;
+        use crossterm::event::KeyModifiers;
+
+        let (tx, _rx) = unbounded_channel::<AppEvent>();
+        let sender = AppEventSender::new(tx);
+        let mut composer =
+            ChatComposer::new(true, sender, true, "Ask Codex to do anything".to_string());
+
+        for character in ['h', 'i'] {
+            let _ = composer
+                .handle_key_event(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+        }
+
+        let (result, _) =
+            composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+        assert!(matches!(result, InputResult::None));
+        assert_eq!(composer.textarea.text(), "hi\n");
+
+        for character in ['t', 'h', 'e', 'r', 'e'] {
+            let _ = composer
+                .handle_key_event(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+        }
+
+        let (result, _) =
+            composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        match result {
+            InputResult::Submitted(text) => assert_eq!(text, "hi\nthere"),
+            _ => panic!("expected Submitted"),
+        }
     }
 
     #[test]
